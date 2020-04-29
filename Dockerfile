@@ -10,6 +10,8 @@ RUN cargo build --release && \
   rm src/*.rs
 
 COPY ./src ./src
+
 RUN cargo test --target=x86_64-unknown-linux-gnu && \
-  rm -rf target/debug/ && \
-  cargo build --release
+  rm -rf target/debug/
+
+RUN cargo build --release

@@ -1,0 +1,30 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Log into registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+
+      - name: Build the Docker image
+        run: |
+          docker build . --file Dockerfile --tag chipp/temp_reader:latest
+
+          export CONTAINER=$(docker create chipp/temp_reader:latest)
+
+          docker cp $(CONTAINER):/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/temp_reader ./
+          docker rm --force $(CONTAINER)
+      - uses: actions/upload-artifact@v2
+        with:
+          name: temp_reader
+          path: ./temp_reader
