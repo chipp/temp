@@ -20,10 +20,10 @@ jobs:
         run: |
           docker build . --file Dockerfile --tag chipp/temp_reader:latest
 
-          export CONTAINER=$(docker create chipp/temp_reader:latest)
+          docker create --name builder chipp/temp_reader:latest
 
-          docker cp $(CONTAINER):/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/temp_reader ./
-          docker rm --force $(CONTAINER)
+          docker cp builder:/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/temp_reader ./
+          docker rm --force builder
       - uses: actions/upload-artifact@v2
         with:
           name: temp_reader
