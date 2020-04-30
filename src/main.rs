@@ -1,42 +1,64 @@
-use rumble::api::{Central, CentralEvent, Peripheral, UUID};
+use rumble::api::{BDAddr, Central, Peripheral, UUID};
 use rumble::bluez::manager::Manager;
-use std::sync::Arc;
-// use std::thread;
-// use std::time::Duration;
+use std::time::Duration;
+
+use temp_reader::*;
 
 fn main() {
     let manager = Manager::new().unwrap();
 
     // get the first bluetooth adapter
     let adapters = manager.adapters().unwrap();
-    let mut adapter = adapters.into_iter().nth(0).unwrap();
+    let mut adapter = adapters.into_iter().next().unwrap();
 
     // reset the adapter -- clears out any errant state
     adapter = manager.down(&adapter).unwrap();
     adapter = manager.up(&adapter).unwrap();
 
     // connect to the adapter
-    let central = Arc::from(adapter.connect().unwrap());
+    let central = adapter.connect().unwrap();
 
-    // start scanning for devices
-    central.start_scan().unwrap();
-    // instead of waiting, you can use central.on_event to be notified of
-    // new devices
+    let addr = BDAddr {
+        address: [0xCF, 0x82, 0xDD, 0xA8, 0x65, 0x4C],
+    };
 
-    let clone = Arc::clone(&central);
-    central.on_event(Box::new(move |event| match event {
-        CentralEvent::DeviceDiscovered(addr) => {
-            let peripheral = clone.peripheral(addr).unwrap();
+    find_device(&central, &addr).unwrap();
+    let temp = central.peripheral(addr).unwrap();
 
-            if peripheral
-                .properties()
-                .local_name
-                .iter()
-                .any(|name| name.contains("MJ_HT_V1"))
-            {
-                println!("found")
-            }
+    // connect to the device
+    println!("{}", temp);
+    temp.connect().unwrap();
+
+    // discover characteristics
+    temp.discover_characteristics().unwrap();
+
+    // find the characteristic we want
+    let chars = temp.characteristics();
+
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    let sensor_uuid = UUID::B128([
+        0x6d, 0x66, 0x70, 0x44, 0x73, 0x66, 0x62, 0x75, 0x66, 0x45, 0x76, 0x64, 0x55, 0xaa, 0x6c,
+        0x22,
+    ]);
+
+    for cmd in chars.iter() {
+        if cmd.uuid == sensor_uuid {
+            temp.subscribe(&cmd).unwrap();
+
+            println!("subscribed {}", cmd.uuid);
+
+            let tx = tx.clone();
+            temp.on_notification(Box::new(move |notification| {
+                tx.send(notification.value).unwrap()
+            }));
         }
-        _ => (),
-    }));
+    }
+
+    let data = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    if let Ok(string) = String::from_utf8(data) {
+        println!("{}", string);
+    }
+
+    temp.disconnect().unwrap();
 }
