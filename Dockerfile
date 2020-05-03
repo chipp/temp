@@ -6,12 +6,15 @@ RUN USER=rust cargo init --lib /home/rust/src
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 RUN cargo build --release && \
-  cargo clean --release -p temp_reader && \
+  cargo clean --release -p temp_reader
+
+RUN cargo build --target=x86_64-unknown-linux-gnu && \
+  cargo clean --target=x86_64-unknown-linux-gnu -p temp_reader && \
   rm src/*.rs
 
 COPY ./src ./src
 
-# RUN cargo test --target=x86_64-unknown-linux-gnu && \
-#   rm -rf target/debug/
+RUN cargo test --target=x86_64-unknown-linux-gnu && \
+  rm -rf target/debug/
 
 RUN cargo build --release
