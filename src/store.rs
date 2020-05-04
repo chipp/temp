@@ -1,7 +1,7 @@
 use super::measurement::Measurement;
 
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
 use lmdb_rs::{DbFlags, DbHandle, EnvBuilder, Environment, MdbError};
-use time::OffsetDateTime;
 
 const SENSOR_DATA_DB: &str = "sensor_data";
 
@@ -25,7 +25,7 @@ impl Store {
     pub fn add_measurement(
         &self,
         measurement: Measurement,
-        time: OffsetDateTime,
+        time: DateTime<Local>,
     ) -> Result<(), MdbError> {
         let txn = self.env.new_transaction()?;
 
@@ -41,15 +41,16 @@ impl Store {
         Ok(())
     }
 
-    pub fn measurements(&self) -> Result<Vec<(OffsetDateTime, Measurement)>, MdbError> {
+    pub fn measurements(&self) -> Result<Vec<(DateTime<Local>, Measurement)>, MdbError> {
         let reader = self.env.get_reader()?;
         let items = reader.bind(&self.sensor_data);
 
-        let mut measurements = Vec::<(OffsetDateTime, Measurement)>::new();
+        let mut measurements = Vec::<(DateTime<Local>, Measurement)>::new();
         measurements.reserve(items.stat()?.ms_entries);
 
         for item in items.iter()? {
-            let timestamp = OffsetDateTime::from_unix_timestamp(item.get_key());
+            let timestamp =
+                Local.from_utc_datetime(&NaiveDateTime::from_timestamp(item.get_key(), 0));
             let measurement = Measurement::from_bytes(item.get_value());
 
             measurements.push((timestamp, measurement));

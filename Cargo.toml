@@ -9,4 +9,4 @@ edition = "2018"
 [dependencies]
 rumble = "0.3"
 lmdb-rs = "0.7"
-time = { version = "0.2", default-features = false, features = ["std"] }
+chrono = "0.4"

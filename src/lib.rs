@@ -7,7 +7,7 @@ use measurement::Measurement;
 use rumble::api::{BDAddr, Central, CentralEvent, Peripheral, UUID};
 use rumble::bluez::manager::Manager;
 
-use time::{offset, OffsetDateTime};
+use chrono::Local;
 
 use std::convert::TryFrom;
 use std::sync::mpsc::channel;
@@ -43,7 +43,7 @@ pub fn measure() {
             let measurement = Measurement::try_from(data.as_slice()).unwrap();
             let store = Store::new("./data.db").unwrap();
 
-            if let Err(err) = store.add_measurement(measurement, OffsetDateTime::now_utc()) {
+            if let Err(err) = store.add_measurement(measurement, Local::now()) {
                 eprintln!("{}", err);
             }
         }
@@ -100,11 +100,7 @@ pub fn list() {
             measurements.sort_by_key(|t| t.0);
 
             for (time, measurement) in measurements {
-                println!(
-                    "{}: {}",
-                    time.to_offset(offset!(+3)).format("%c"),
-                    measurement
-                );
+                println!("{}: {}", time.format("%c"), measurement);
             }
         }
         Err(err) => eprintln!("cannot load measurements: {}", err),
