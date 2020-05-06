@@ -102,7 +102,11 @@ pub fn list() {
             measurements.sort_by_key(|t| t.0);
 
             for (time, measurement) in measurements {
-                println!("{}: {}", time.format("%c"), measurement);
+                println!(
+                    "{}: {}",
+                    time.with_timezone(&Local).format("%c"),
+                    measurement
+                );
             }
         }
         Err(err) => eprintln!("cannot load measurements: {}", err),
