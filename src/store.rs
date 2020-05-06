@@ -12,7 +12,7 @@ pub struct Store {
 
 impl Store {
     pub fn new(path: &str) -> Result<Store, MdbError> {
-        let env = EnvBuilder::new().max_dbs(3).open(path, 0o600)?;
+        let env = EnvBuilder::new().max_dbs(3).open(path, 0o664)?;
 
         Ok(Store {
             sensor_data: env.create_db(SENSOR_DATA_DB, DbFlags::empty())?,

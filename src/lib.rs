@@ -20,6 +20,8 @@ const SENSOR_DATA_CHAR_UUID: UUID = UUID::B128([
 const FIRMWARE_CHAR_UUID: UUID = UUID::B16(0x2A26);
 const BATTERY_CHAR_UUID: UUID = UUID::B16(0x2A19);
 
+const DB_PATH: &str = "/var/db/temperature/";
+
 pub fn measure() {
     let temp = initialize();
 
@@ -41,7 +43,7 @@ pub fn measure() {
     match rx.recv_timeout(Duration::from_secs(5)) {
         Ok(data) => {
             let measurement = Measurement::try_from(data.as_slice()).unwrap();
-            let store = Store::new("./data.db").unwrap();
+            let store = Store::new(DB_PATH).unwrap();
 
             if let Err(err) = store.add_measurement(measurement, Local::now()) {
                 eprintln!("{}", err);
@@ -94,7 +96,7 @@ where
 }
 
 pub fn list() {
-    let store = Store::new("./data.db").unwrap();
+    let store = Store::new(DB_PATH).unwrap();
     match store.measurements() {
         Ok(mut measurements) => {
             measurements.sort_by_key(|t| t.0);
