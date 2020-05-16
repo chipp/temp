@@ -56,6 +56,7 @@ pub fn measure() {
 }
 
 fn initialize() -> impl Peripheral {
+    println!("initializing");
     let manager = Manager::new().unwrap();
     let adapters = manager.adapters().unwrap();
 
@@ -72,7 +73,11 @@ fn initialize() -> impl Peripheral {
 
     let temp = central.peripheral(sensor_addr).unwrap();
     temp.connect().unwrap();
+
+    println!("connected");
+
     temp.discover_characteristics().unwrap();
+    println!("chars");
 
     temp
 }

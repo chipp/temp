@@ -1,6 +1,8 @@
 use temp_reader::*;
 
 fn main() {
+    env_logger::init();
+
     let mut args = std::env::args().skip(1);
 
     match args.next().as_ref().map(String::as_str) {

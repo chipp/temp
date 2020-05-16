@@ -12,4 +12,5 @@ endif
 	docker cp temp_reader:/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/temp_reader $(TMP)/
 	@docker rm --force temp_reader
 
-	scp $(TMP)/temp_reader pi@192.168.1.9:
+	scp $(TMP)/temp_reader pi:
+	ssh pi "sudo setcap 'cap_net_raw,cap_net_admin+eip' temp_reader"
