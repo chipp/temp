@@ -1,5 +1,5 @@
 [package]
-name = "reader"
+name = "bluetooth"
 version = "0.1.0"
 authors = ["Vladimir Burdukov <chippcheg@gmail.com>"]
 edition = "2018"
@@ -7,10 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bluetooth = { path = "../bluetooth" }
-enumflags2 = "0.6"
 
-# rumble = "0.3"
-# lmdb-rs = "0.7"
-# chrono = "0.4"
-env_logger = "*"
+[target.'cfg(target_os = "macos")'.dependencies]
+core_bluetooth = "0.1"

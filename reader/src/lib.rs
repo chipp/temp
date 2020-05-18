@@ -1,149 +1,206 @@
-mod store;
-use store::Store;
+mod data;
+use data::Data;
 
-mod measurement;
-use measurement::Measurement;
+use enumflags2::BitFlags;
 
-use rumble::api::{BDAddr, Central, CentralEvent, Peripheral, UUID};
-use rumble::bluez::manager::Manager;
+use std::fmt;
 
-use chrono::Local;
+#[derive(BitFlags, Copy, Clone, Debug, PartialEq)]
+#[repr(u16)]
+pub enum FrameControlFlags {
+    IsFactoryNew = 1 << 0,
+    IsConnected = 1 << 1,
+    IsCentral = 1 << 2,
+    IsEncrypted = 1 << 3,
+    HasMacAddress = 1 << 4,
+    HasCapabilities = 1 << 5,
+    HasEvent = 1 << 6,
+    HasCustomData = 1 << 7,
+    HasSubtitle = 1 << 8,
+    HasBinding = 1 << 9,
+}
 
-use std::convert::TryFrom;
-use std::sync::mpsc::channel;
-use std::time::Duration;
+#[derive(Debug, PartialEq)]
+pub enum Event {
+    Temperature(u16),                 // 4100
+    Humidity(u16),                    // 4102
+    Battery(u8),                      // 4106
+    TemperatureAndHumidity(u16, u16), // 4109
+}
 
-const SENSOR_DATA_CHAR_UUID: UUID = UUID::B128([
-    0x6d, 0x66, 0x70, 0x44, 0x73, 0x66, 0x62, 0x75, 0x66, 0x45, 0x76, 0x64, 0x55, 0xaa, 0x6c, 0x22,
-]);
+impl Event {
+    fn read_from_data(data: &mut Data) -> Option<Event> {
+        let event_type = data.read_u16()?;
+        let event_len = data.read_u8()?;
 
-const FIRMWARE_CHAR_UUID: UUID = UUID::B16(0x2A26);
-const BATTERY_CHAR_UUID: UUID = UUID::B16(0x2A19);
-
-const DB_PATH: &str = "/var/db/temperature/";
-
-pub fn measure() {
-    let temp = initialize();
-
-    let chars = temp.characteristics();
-
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    for cmd in chars.iter() {
-        if cmd.uuid == SENSOR_DATA_CHAR_UUID {
-            temp.subscribe(&cmd).unwrap();
-
-            let tx = tx.clone();
-            temp.on_notification(Box::new(move |notification| {
-                tx.send(notification.value).unwrap()
-            }));
-        }
-    }
-
-    match rx.recv_timeout(Duration::from_secs(5)) {
-        Ok(data) => {
-            let measurement = Measurement::try_from(data.as_slice()).unwrap();
-            let store = Store::new(DB_PATH).unwrap();
-
-            if let Err(err) = store.add_measurement(measurement, Local::now()) {
-                eprintln!("{}", err);
+        match (event_type, event_len) {
+            (0x1004, 2) => {
+                let temperature = data.read_u16()?;
+                Some(Event::Temperature(temperature))
+            }
+            (0x1006, 2) => {
+                let humidity = data.read_u16()?;
+                Some(Event::Humidity(humidity))
+            }
+            (0x100a, 1) => {
+                let battery = data.read_u8()?;
+                Some(Event::Battery(battery))
+            }
+            (0x100d, 4) => {
+                let temperature = data.read_u16()?;
+                let humidity = data.read_u16()?;
+                Some(Event::TemperatureAndHumidity(temperature, humidity))
+            }
+            _ => {
+                eprintln!("unsupported event ({}, {})", event_type, event_len);
+                None
             }
         }
-        Err(err) => eprintln!("{}", err),
-    }
-
-    temp.disconnect().unwrap();
-}
-
-fn initialize() -> impl Peripheral {
-    println!("initializing");
-    let manager = Manager::new().unwrap();
-    let adapters = manager.adapters().unwrap();
-
-    let mut adapter = adapters.into_iter().next().unwrap();
-    adapter = manager.down(&adapter).unwrap();
-    adapter = manager.up(&adapter).unwrap();
-    let central = adapter.connect().unwrap();
-
-    let sensor_addr = BDAddr {
-        address: [0xCF, 0x82, 0xDD, 0xA8, 0x65, 0x4C],
-    };
-
-    discover_peripheral(&central, &sensor_addr).unwrap();
-
-    let temp = central.peripheral(sensor_addr).unwrap();
-    temp.connect().unwrap();
-
-    println!("connected");
-
-    temp.discover_characteristics().unwrap();
-    println!("chars");
-
-    temp
-}
-
-fn discover_peripheral<C, P>(central: &C, addr_to_find: &BDAddr) -> Option<()>
-where
-    C: Central<P>,
-    P: Peripheral,
-{
-    let (tx, rx) = channel();
-    central.on_event(Box::new(move |event| {
-        let _ = tx.send(event);
-    }));
-
-    central.start_scan().unwrap();
-
-    rx.into_iter().find_map(|event| match event {
-        CentralEvent::DeviceUpdated(addr) if addr_to_find == &addr => Some(()),
-        _ => None,
-    })
-}
-
-pub fn list() {
-    let store = Store::new(DB_PATH).unwrap();
-    match store.measurements() {
-        Ok(mut measurements) => {
-            measurements.sort_by_key(|t| t.0);
-
-            for (time, measurement) in measurements {
-                println!(
-                    "{}: {}",
-                    time.with_timezone(&Local).format("%c"),
-                    measurement
-                );
-            }
-        }
-        Err(err) => eprintln!("cannot load measurements: {}", err),
     }
 }
 
-pub fn info() {
-    let temp = initialize();
-
-    let chars = temp.characteristics();
-
-    for chr in chars.iter() {
-        if chr.uuid == FIRMWARE_CHAR_UUID {
-            let mut data = temp.read(&chr).unwrap();
-            data.remove(0);
-
-            println!(
-                "firmware: {}",
-                std::str::from_utf8(&data).unwrap_or("unknown")
-            );
-
-            break;
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Temperature(temperature) => write!(f, "T: {}", (*temperature as f32) / 10f32),
+            Self::Humidity(humidity) => write!(f, "H: {}", (*humidity as f32) / 10f32),
+            Self::Battery(battery) => write!(f, "B: {}", battery),
+            Self::TemperatureAndHumidity(temperature, humidity) => write!(
+                f,
+                "T: {} H: {}",
+                (*temperature as f32) / 10f32,
+                (*humidity as f32) / 10f32
+            ),
         }
     }
+}
 
-    for chr in chars.iter() {
-        if chr.uuid == BATTERY_CHAR_UUID {
-            let data = temp.read(&chr).unwrap();
-            println!("battery: {}", data[1]);
-            break;
-        }
+#[derive(Debug, PartialEq)]
+pub struct MacAddr {
+    octets: [u8; 6],
+}
+
+impl MacAddr {
+    fn read_from_data(data: &mut Data) -> Option<MacAddr> {
+        let mut octets = [0; 6];
+        let bytes = data.read_bytes(6)?;
+
+        octets.copy_from_slice(&bytes);
+        octets.reverse();
+
+        Some(MacAddr { octets })
     }
 
-    temp.disconnect().unwrap();
+    #[cfg(test)]
+    fn from_octets(octets: [u8; 6]) -> MacAddr {
+        MacAddr { octets }
+    }
+}
+
+impl fmt::Display for MacAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
+            self.octets[0],
+            self.octets[1],
+            self.octets[2],
+            self.octets[3],
+            self.octets[4],
+            self.octets[5]
+        )
+    }
+}
+
+pub fn parse_event(bytes: &[u8]) -> Option<(MacAddr, Event)> {
+    if bytes.len() < 5 {
+        return None;
+    }
+
+    let mut data = Data::new(bytes);
+
+    let flags = BitFlags::<FrameControlFlags>::from_bits_truncate(data.read_u16()?);
+    data.skip(3);
+
+    let mac_addr = if flags.contains(FrameControlFlags::HasMacAddress) {
+        MacAddr::read_from_data(&mut data)
+    } else {
+        None
+    }?;
+
+    let event = if flags.contains(FrameControlFlags::HasEvent) {
+        Event::read_from_data(&mut data)
+    } else {
+        None
+    }?;
+
+    Some((mac_addr, event))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_humidity_event() {
+        let bytes = [
+            0x50, 0x20, 0xaa, 0x1, 0x7c, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01, 0x6, 0x10, 0x2, 0x77,
+            0x1,
+        ];
+
+        let (mac_addr, event) = parse_event(&bytes).unwrap();
+        assert_eq!(
+            mac_addr,
+            MacAddr::from_octets([0x01, 0x23, 0x45, 0x67, 0x89, 0xab])
+        );
+
+        assert_eq!(event, Event::Humidity(375));
+    }
+
+    #[test]
+    fn test_temperature_event() {
+        let bytes = [
+            0x50, 0x20, 0xaa, 0x1, 0xa8, 0x45, 0x23, 0x01, 0xef, 0xcd, 0xab, 0x4, 0x10, 0x2, 0xf1,
+            0x0,
+        ];
+
+        let (mac_addr, event) = parse_event(&bytes).unwrap();
+        assert_eq!(
+            mac_addr,
+            MacAddr::from_octets([0xab, 0xcd, 0xef, 0x01, 0x23, 0x45])
+        );
+
+        assert_eq!(event, Event::Temperature(241));
+    }
+
+    #[test]
+    fn test_battery_event() {
+        let bytes = [
+            0x50, 0x20, 0xaa, 0x1, 0x81, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0xa, 0x10, 0x1, 0x61,
+        ];
+
+        let (mac_addr, event) = parse_event(&bytes).unwrap();
+        assert_eq!(
+            mac_addr,
+            MacAddr::from_octets([0x01, 0x01, 0x01, 0x01, 0x01, 0x01])
+        );
+
+        assert_eq!(event, Event::Battery(97));
+    }
+
+    #[test]
+    fn test_temperature_and_humidity_event() {
+        let bytes = [
+            0x50, 0x20, 0xaa, 0x1, 0xae, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0xd, 0x10, 0x4, 0xf0,
+            0x0, 0x6e, 0x1,
+        ];
+
+        let (mac_addr, event) = parse_event(&bytes).unwrap();
+        assert_eq!(
+            mac_addr,
+            MacAddr::from_octets([0x11, 0x11, 0x11, 0x11, 0x11, 0x11])
+        );
+
+        assert_eq!(event, Event::TemperatureAndHumidity(240, 366));
+    }
 }

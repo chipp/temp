@@ -1,8 +1,0 @@
-[build]
-target = "x86_64-unknown-linux-musl"
-
-[target.x86_64-unknown-linux-musl]
-linker = "x86_64-linux-musl-gcc"
-
-[target.armv7-unknown-linux-gnueabihf]
-linker = "arm-none-eabi-gcc"

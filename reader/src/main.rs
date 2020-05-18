@@ -1,15 +1,18 @@
-use temp_reader::*;
+use bluetooth::{BLEAdvertisementObserver, ServiceData};
+use reader::*;
 
 fn main() {
     env_logger::init();
 
-    let mut args = std::env::args().skip(1);
+    let observer = BLEAdvertisementObserver::new();
+    observer.start_scan();
 
-    match args.next().as_ref().map(String::as_str) {
-        Some("measure") => measure(),
-        Some("list") => list(),
-        Some("info") => info(),
-        Some(command) => panic!("invalid command {}", command),
-        None => panic!("usage: temp_reader (measure|list|info)"),
+    println!("started scan");
+
+    for data in observer.receiver().iter() {
+        let ServiceData(bytes) = data;
+        if let Some((mac_addr, event)) = parse_event(&bytes) {
+            println!("{}: {}", mac_addr, event);
+        }
     }
 }
