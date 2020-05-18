@@ -1,16 +1,16 @@
 build:
-	docker build . --file Dockerfile --tag chipp/temp_reader:latest
+	docker build . --file Dockerfile --tag chipp/lisa/reader:latest
 
 install: TMP := $(shell mktemp -d)
 install: build
-ifneq ($(shell docker ps -a | grep temp_reader | wc -l | tr -d ' '),0)
-	@docker rm --force temp_reader
+ifneq ($(shell docker ps -a | grep reader | wc -l | tr -d ' '),0)
+	@docker rm --force reader
 endif
 
-	@docker create --name temp_reader chipp/temp_reader:latest
+	@docker create --name reader chipp/lisa/reader:latest
 
-	docker cp temp_reader:/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/temp_reader $(TMP)/
-	@docker rm --force temp_reader
+	docker cp temp_reader:/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/reader $(TMP)/
+	@docker rm --force reader
 
-	scp $(TMP)/temp_reader pi:
-	ssh pi "sudo setcap 'cap_net_raw,cap_net_admin+eip' temp_reader"
+	scp $(TMP)/reader pi:
+	ssh pi "sudo setcap 'cap_net_raw,cap_net_admin+eip' reader"
