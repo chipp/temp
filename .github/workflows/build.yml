@@ -22,9 +22,10 @@ jobs:
 
           docker create --name builder chipp/temp_reader:latest
 
-          docker cp builder:/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/temp_reader ./
+          mkdir -p build
+          docker cp builder:/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/reader ./build/
           docker rm --force builder
       - uses: actions/upload-artifact@v2
         with:
-          name: temp_reader
-          path: ./temp_reader
+          name: reader
+          path: ./build/reader
