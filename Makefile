@@ -9,7 +9,7 @@ endif
 
 	@docker create --name reader chipp/lisa/reader:latest
 
-	docker cp reader:/home/rust/src/target/armv7-unknown-linux-gnueabihf/release/reader $(TMP)/
+	docker cp reader:/home/rust/src/target/armv7-unknown-linux-musleabihf/release/reader $(TMP)/
 	@docker rm --force reader
 
 	scp $(TMP)/reader pi:
